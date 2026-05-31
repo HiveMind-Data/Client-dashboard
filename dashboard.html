@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Price Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a0c0f;
+  --bg2: #111318;
+  --bg3: #181c22;
+  --bg4: #1e2229;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #f0f2f5;
+  --text2: #8b95a1;
+  --text3: #4f5a66;
+  --accent: #00e5a0;
+  --accent2: #00b87d;
+  --accent-dim: rgba(0,229,160,0.08);
+  --red: #ff4f4f;
+  --red-dim: rgba(255,79,79,0.08);
+  --amber: #f5a623;
+  --amber-dim: rgba(245,166,35,0.08);
+  --blue: #4a9eff;
+  --blue-dim: rgba(74,158,255,0.08);
+  --font: 'DM Sans', sans-serif;
+  --serif: 'DM Serif Display', serif;
+  --mono: 'DM Mono', monospace;
+  --radius: 10px;
+  --radius-lg: 14px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;line-height:1.5;overflow:hidden}
+
+/* ── Lock screen ── */
+#lock{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:0}
+.lock-card{background:var(--bg2);border:0.5px solid var(--border2);border-radius:var(--radius-lg);padding:48px 40px;width:360px;text-align:center}
+.lock-logo{font-family:var(--serif);font-size:28px;color:var(--text);margin-bottom:4px;letter-spacing:-0.02em}
+.lock-sub{font-size:12px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:36px}
+.lock-label{font-size:11px;color:var(--text2);text-align:left;display:block;margin-bottom:6px;letter-spacing:0.04em;text-transform:uppercase}
+.lock-input{width:100%;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);padding:12px 14px;color:var(--text);font-family:var(--mono);font-size:14px;letter-spacing:0.1em;outline:none;transition:border-color 0.2s}
+.lock-input:focus{border-color:var(--accent)}
+.lock-btn{margin-top:16px;width:100%;padding:12px;background:var(--accent);color:#000;font-family:var(--font);font-size:13px;font-weight:600;letter-spacing:0.04em;border:none;border-radius:var(--radius);cursor:pointer;transition:background 0.2s}
+.lock-btn:hover{background:var(--accent2)}
+.lock-err{font-size:12px;color:var(--red);margin-top:10px;height:16px}
+.lock-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin-right:6px;box-shadow:0 0 8px var(--accent)}
+
+/* ── App shell ── */
+#app{display:grid;grid-template-columns:220px 1fr;height:100%;display:none}
+
+/* ── Sidebar ── */
+.sidebar{background:var(--bg2);border-right:0.5px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-top{padding:24px 20px 20px;border-bottom:0.5px solid var(--border)}
+.brand{font-family:var(--serif);font-size:20px;color:var(--text);letter-spacing:-0.02em}
+.brand span{color:var(--accent)}
+.brand-sub{font-size:10px;color:var(--text3);letter-spacing:0.08em;text-transform:uppercase;margin-top:3px}
+.nav{flex:1;padding:12px 0;overflow-y:auto}
+.nav-section{padding:16px 20px 6px;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);font-weight:500}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 20px;font-size:13px;color:var(--text2);cursor:pointer;transition:all 0.15s;position:relative}
+.nav-item:hover{color:var(--text);background:rgba(255,255,255,0.03)}
+.nav-item.active{color:var(--text);background:var(--accent-dim)}
+.nav-item.active::before{content:'';position:absolute;left:0;top:4px;bottom:4px;width:2px;background:var(--accent);border-radius:0 2px 2px 0}
+.nav-item svg{width:15px;height:15px;flex-shrink:0;opacity:0.7}
+.nav-item.active svg{opacity:1}
+.nav-badge{margin-left:auto;font-size:10px;background:var(--accent-dim);color:var(--accent);padding:2px 6px;border-radius:20px;font-weight:500}
+.sidebar-bottom{padding:16px 20px;border-top:0.5px solid var(--border)}
+.run-info{font-size:11px;color:var(--text3)}
+.run-info strong{color:var(--text2);font-weight:500}
+
+/* ── Main area ── */
+.main{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 28px;height:56px;border-bottom:0.5px solid var(--border);flex-shrink:0}
+.topbar-left{display:flex;align-items:baseline;gap:12px}
+.page-title{font-family:var(--serif);font-size:18px;color:var(--text);letter-spacing:-0.01em}
+.page-sub{font-size:12px;color:var(--text3)}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.btn{display:flex;align-items:center;gap:6px;padding:7px 14px;font-size:12px;font-family:var(--font);border-radius:var(--radius);cursor:pointer;transition:all 0.15s;font-weight:500}
+.btn-ghost{background:transparent;border:0.5px solid var(--border2);color:var(--text2)}
+.btn-ghost:hover{color:var(--text);border-color:rgba(255,255,255,0.2);background:rgba(255,255,255,0.04)}
+.btn-accent{background:var(--accent);border:none;color:#000;font-weight:600}
+.btn-accent:hover{background:var(--accent2)}
+.btn svg{width:13px;height:13px}
+.content{flex:1;overflow-y:auto;padding:24px 28px;display:flex;flex-direction:column;gap:20px}
+
+/* ── Upload screen ── */
+#upload-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:500px;gap:32px}
+.upload-hero{text-align:center}
+.upload-hero h1{font-family:var(--serif);font-size:36px;color:var(--text);margin-bottom:10px;letter-spacing:-0.02em}
+.upload-hero p{font-size:14px;color:var(--text2);max-width:460px;line-height:1.7}
+.drop-zone{width:600px;background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--radius-lg);padding:48px;text-align:center;cursor:pointer;transition:all 0.2s;position:relative}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--accent);background:var(--accent-dim)}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.drop-icon{width:48px;height:48px;background:var(--bg3);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+.drop-icon svg{width:22px;height:22px;color:var(--accent)}
+.drop-title{font-size:15px;font-weight:500;color:var(--text);margin-bottom:6px}
+.drop-sub{font-size:12px;color:var(--text3)}
+.drop-formats{display:flex;gap:8px;justify-content:center;margin-top:16px}
+.format-pill{font-size:10px;padding:3px 8px;border-radius:20px;border:0.5px solid var(--border2);color:var(--text3);font-family:var(--mono)}
+.upload-files{width:600px;display:flex;flex-direction:column;gap:8px}
+.upload-file-row{display:flex;align-items:center;gap:12px;background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius);padding:10px 14px}
+.upload-file-icon{width:32px;height:32px;background:var(--bg3);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.upload-file-icon svg{width:15px;height:15px}
+.upload-file-name{font-size:13px;color:var(--text);flex:1;font-weight:500}
+.upload-file-size{font-size:11px;color:var(--text3);font-family:var(--mono)}
+.upload-file-status{font-size:11px;padding:2px 8px;border-radius:20px}
+.status-ok{background:var(--accent-dim);color:var(--accent)}
+.status-processing{background:var(--amber-dim);color:var(--amber)}
+.upload-clear{background:none;border:none;color:var(--text3);cursor:pointer;padding:4px;border-radius:4px}
+.upload-clear:hover{color:var(--red)}
+.process-btn-wrap{display:flex;justify-content:center;gap:12px}
+
+/* ── Metrics ── */
+.metrics-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.metric{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;position:relative;overflow:hidden}
+.metric::after{content:'';position:absolute;top:0;right:0;width:60px;height:60px;border-radius:50%;transform:translate(20px,-20px);opacity:0.06}
+.metric.m-green::after{background:var(--accent)}
+.metric.m-red::after{background:var(--red)}
+.metric.m-amber::after{background:var(--amber)}
+.metric.m-blue::after{background:var(--blue)}
+.metric.m-white::after{background:#fff}
+.metric-label{font-size:10px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);margin-bottom:10px;font-weight:500}
+.metric-val{font-family:var(--serif);font-size:30px;color:var(--text);line-height:1;letter-spacing:-0.02em}
+.metric-val.green{color:var(--accent)}
+.metric-val.red{color:var(--red)}
+.metric-sub{font-size:11px;color:var(--text3);margin-top:6px}
+.metric-sub.up{color:var(--accent)}
+.metric-sub.down{color:var(--red)}
+
+/* ── Section ── */
+.section{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.section-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:0.5px solid var(--border)}
+.section-title{font-size:13px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:8px}
+.section-title svg{width:14px;height:14px;color:var(--accent)}
+.section-body{padding:18px}
+.section-body-np{padding:0}
+
+/* ── Competitor cards ── */
+.comp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:18px}
+.comp-card{border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:16px;background:var(--bg3);position:relative;overflow:hidden;cursor:pointer;transition:border-color 0.2s}
+.comp-card:hover{border-color:var(--border2)}
+.comp-card.active-comp{border-color:var(--accent)}
+.comp-card-name{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);margin-bottom:12px;font-weight:500}
+.comp-card-stat{display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--border)}
+.comp-card-stat:last-child{border:none;padding-bottom:0}
+.comp-card-stat-l{font-size:12px;color:var(--text3)}
+.comp-card-stat-r{font-size:12px;font-weight:500;color:var(--text)}
+.comp-card-stat-r.g{color:var(--accent)}
+.comp-card-stat-r.r{color:var(--red)}
+.comp-indicator{position:absolute;top:0;left:0;right:0;height:2px}
+.comp-indicator.g{background:var(--accent)}
+.comp-indicator.r{background:var(--red)}
+.comp-indicator.a{background:var(--amber)}
+
+/* ── Table ── */
+.tbl-controls{display:flex;align-items:center;gap:10px;padding:12px 18px;border-bottom:0.5px solid var(--border);flex-wrap:wrap}
+.search-wrap{position:relative;flex:1;min-width:200px}
+.search-wrap svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--text3);pointer-events:none}
+.search-input{width:100%;background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);padding:7px 10px 7px 32px;color:var(--text);font-size:12px;font-family:var(--font);outline:none;transition:border-color 0.2s}
+.search-input:focus{border-color:var(--accent)}
+.search-input::placeholder{color:var(--text3)}
+.filter-group{display:flex;gap:6px}
+.filter-btn{padding:6px 12px;font-size:11px;background:var(--bg3);border:0.5px solid var(--border);border-radius:20px;color:var(--text3);cursor:pointer;transition:all 0.15s;white-space:nowrap;font-family:var(--font);font-weight:500}
+.filter-btn:hover{color:var(--text);border-color:var(--border2)}
+.filter-btn.active{background:var(--accent-dim);border-color:rgba(0,229,160,0.3);color:var(--accent)}
+.select-sm{background:var(--bg3);border:0.5px solid var(--border2);border-radius:var(--radius);padding:6px 10px;color:var(--text2);font-size:11px;font-family:var(--font);outline:none;cursor:pointer}
+.select-sm:focus{border-color:var(--accent)}
+table{width:100%;border-collapse:collapse}
+th{padding:10px 14px;font-size:10px;text-transform:uppercase;letter-spacing:0.07em;color:var(--text3);font-weight:500;text-align:left;background:var(--bg3);border-bottom:0.5px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none}
+th:hover{color:var(--text2)}
+th.sorted{color:var(--accent)}
+td{padding:10px 14px;font-size:12px;color:var(--text2);border-bottom:0.5px solid var(--border);vertical-align:middle}
+td:first-child{color:var(--text)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,0.015)}
+.pill{display:inline-flex;align-items:center;font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;letter-spacing:0.02em;white-space:nowrap}
+.pill-g{background:rgba(0,229,160,0.12);color:var(--accent)}
+.pill-r{background:rgba(255,79,79,0.12);color:var(--red)}
+.pill-a{background:rgba(245,166,35,0.12);color:var(--amber)}
+.pill-b{background:rgba(74,158,255,0.12);color:var(--blue)}
+.pill-dim{background:var(--bg3);color:var(--text3)}
+.price-col{font-family:var(--mono);font-size:12px}
+.diff-g{color:var(--accent);font-family:var(--mono);font-size:12px;font-weight:600}
+.diff-r{color:var(--red);font-family:var(--mono);font-size:12px;font-weight:600}
+.diff-n{color:var(--text3);font-family:var(--mono);font-size:12px}
+.sku-tag{font-family:var(--mono);font-size:10px;color:var(--text3);background:var(--bg3);padding:2px 5px;border-radius:4px}
+.prod-name{font-weight:500;font-size:13px;color:var(--text);line-height:1.3}
+.prod-meta{font-size:11px;color:var(--text3);margin-top:2px}
+.tbl-footer{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-top:0.5px solid var(--border);background:var(--bg3)}
+.tbl-count{font-size:11px;color:var(--text3)}
+.pagination{display:flex;gap:4px}
+.page-btn{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:0.5px solid var(--border);border-radius:6px;background:transparent;color:var(--text3);font-size:12px;cursor:pointer;font-family:var(--mono);transition:all 0.15s}
+.page-btn:hover{border-color:var(--border2);color:var(--text)}
+.page-btn.active{background:var(--accent-dim);border-color:rgba(0,229,160,0.3);color:var(--accent)}
+
+/* ── Charts ── */
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.chart-wrap{background:var(--bg2);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:18px}
+.chart-title{font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px}
+.chart-sub{font-size:11px;color:var(--text3);margin-bottom:16px}
+.chart-canvas{position:relative;height:200px}
+
+/* ── Opportunities ── */
+.opp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.opp-card{background:var(--bg3);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;border-left:3px solid var(--red)}
+.opp-card.positive{border-left-color:var(--accent)}
+.opp-prod{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px;line-height:1.3}
+.opp-comp{font-size:11px;color:var(--text3);margin-bottom:8px}
+.opp-prices{display:flex;align-items:center;gap:12px}
+.opp-price{font-family:var(--mono);font-size:13px}
+.opp-price-label{font-size:10px;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);display:block;margin-bottom:2px}
+.opp-diff{font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px}
+.opp-diff.bad{background:var(--red-dim);color:var(--red)}
+.opp-diff.good{background:var(--accent-dim);color:var(--accent)}
+.opp-arrow{color:var(--text3);font-size:12px}
+
+/* ── Downloads ── */
+.downloads-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:18px}
+.dl-card{background:var(--bg3);border:0.5px solid var(--border);border-radius:var(--radius-lg);padding:16px;display:flex;flex-direction:column;gap:10px}
+.dl-icon{width:36px;height:36px;background:var(--bg4);border-radius:8px;display:flex;align-items:center;justify-content:center}
+.dl-icon svg{width:18px;height:18px}
+.dl-name{font-size:13px;font-weight:500;color:var(--text);line-height:1.3}
+.dl-meta{font-size:11px;color:var(--text3)}
+.dl-btn{display:flex;align-items:center;justify-content:center;gap:6px;padding:7px 12px;background:transparent;border:0.5px solid var(--border2);border-radius:var(--radius);color:var(--text2);font-size:11px;cursor:pointer;transition:all 0.15s;font-family:var(--font);font-weight:500;margin-top:auto}
+.dl-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+.dl-btn svg{width:12px;height:12px}
+
+/* ── State ── */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px;color:var(--text3);gap:12px}
+.empty svg{width:40px;height:40px;opacity:0.3}
+.empty p{font-size:13px;text-align:center;max-width:280px;line-height:1.6}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:24px;right:24px;background:var(--bg2);border:0.5px solid var(--border2);border-radius:var(--radius);padding:12px 16px;font-size:12px;color:var(--text);z-index:999;transform:translateY(20px);opacity:0;transition:all 0.3s;pointer-events:none}
+.toast.show{transform:none;opacity:1}
+.toast.toast-ok{border-left:3px solid var(--accent)}
+.toast.toast-err{border-left:3px solid var(--red)}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── Animations ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.animate-in{animation:fadeUp 0.35s ease forwards}
+.delay-1{animation-delay:0.05s}
+.delay-2{animation-delay:0.1s}
+.delay-3{animation-delay:0.15s}
+.delay-4{animation-delay:0.2s}
+.delay-5{animation-delay:0.25s}
+</style>
+</head>
+<body>
+
+<!-- LOCK SCREEN -->
+<div id="lock">
+  <div class="lock-card">
+    <div class="lock-logo">Price Intel<span style="color:var(--accent)">.</span></div>
+    <div class="lock-sub"><span class="lock-dot"></span>Secure access</div>
+    <label class="lock-label" for="pw-input">Access code</label>
+    <input class="lock-input" type="password" id="pw-input" placeholder="••••••••" autocomplete="off">
+    <button class="lock-btn" onclick="tryUnlock()">Enter dashboard</button>
+    <div class="lock-err" id="lock-err"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- APP -->
+<div id="app">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-top">
+      <div class="brand">Price Intel<span>.</span></div>
+      <div class="brand-sub">Competitor intelligence</div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Overview</div>
+      <div class="nav-item active" onclick="showPage('summary')" id="nav-summary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Summary
+      </div>
+      <div class="nav-item" onclick="showPage('opportunities')" id="nav-opportunities">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        Opportunities
+        <span class="nav-badge" id="opp-badge">—</span>
+      </div>
+      <div class="nav-section">Competitors</div>
+      <div class="nav-item" onclick="showPage('matches')" id="nav-matches">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        All matches
+        <span class="nav-badge" id="matches-badge">—</span>
+      </div>
+      <div class="nav-item" onclick="showPage('catalogue')" id="nav-catalogue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Full catalogue
+      </div>
+      <div class="nav-section">Data</div>
+      <div class="nav-item" onclick="showPage('upload')" id="nav-upload">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        Upload data
+      </div>
+      <div class="nav-item" onclick="showPage('downloads')" id="nav-downloads">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Downloads
+      </div>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="run-info" id="run-info">No data loaded</div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-left">
+        <div class="page-title" id="page-title">Summary</div>
+        <div class="page-sub" id="page-sub">Awaiting data upload</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-ghost" onclick="showPage('upload')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+          Upload new data
+        </button>
+        <button class="btn btn-ghost" onclick="lockApp()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Lock
+        </button>
+      </div>
+    </div>
+
+    <div class="content" id="content">
+      <!-- pages rendered here -->
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// CONFIG — change password here
+// ─────────────────────────────────────────────
+const PASSWORD = 'intel2024';
+
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+let state = {
+  loaded: false,
+  yourProducts: [],       // base store products
+  competitors: {},        // { name: { full:[], matches:[] } }
+  uploadedFiles: [],      // raw file references for download
+  allMatches: [],         // flattened match rows
+  sortCol: null,
+  sortDir: 1,
+  matchFilter: 'all',
+  catFilter: 'all',
+  compFilter: 'all',
+  searchQ: '',
+  page: 1,
+  pageSize: 25,
+};
+
+// ─────────────────────────────────────────────
+// LOCK
+// ─────────────────────────────────────────────
+function tryUnlock() {
+  const val = document.getElementById('pw-input').value;
+  if (val === PASSWORD) {
+    document.getElementById('lock').style.display = 'none';
+    document.getElementById('app').style.display = 'grid';
+    showPage(state.loaded ? 'summary' : 'upload');
+  } else {
+    const err = document.getElementById('lock-err');
+    err.textContent = 'Incorrect access code.';
+    document.getElementById('pw-input').value = '';
+    setTimeout(() => err.textContent = '', 2500);
+  }
+}
+document.getElementById('pw-input').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+
+function lockApp() {
+  document.getElementById('lock').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('pw-input').value = '';
+}
+
+// ─────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast toast-${type} show`;
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ─────────────────────────────────────────────
+// NAVIGATION
+// ─────────────────────────────────────────────
+const pages = ['summary','opportunities','matches','catalogue','upload','downloads'];
+const pageMeta = {
+  summary:       { title: 'Summary', sub: 'Overview of competitor pricing landscape' },
+  opportunities: { title: 'Opportunities', sub: 'Products where competitors are cheaper — act on these' },
+  matches:       { title: 'All matches', sub: 'Every matched product across all competitors' },
+  catalogue:     { title: 'Full catalogue', sub: 'Your complete product listing' },
+  upload:        { title: 'Upload data', sub: 'Drop in fresh scraper CSV files to update the dashboard' },
+  downloads:     { title: 'Downloads', sub: 'Export reports and raw data files' },
+};
+
+function showPage(id) {
+  pages.forEach(p => {
+    const el = document.getElementById('nav-' + p);
+    if (el) el.classList.toggle('active', p === id);
+  });
+  document.getElementById('page-title').textContent = pageMeta[id].title;
+  document.getElementById('page-sub').textContent = pageMeta[id].sub;
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+  const renders = {
+    summary: renderSummary,
+    opportunities: renderOpportunities,
+    matches: renderMatches,
+    catalogue: renderCatalogue,
+    upload: renderUpload,
+    downloads: renderDownloads,
+  };
+  if (renders[id]) renders[id](content);
+}
+
+// ─────────────────────────────────────────────
+// UPLOAD PAGE
+// ─────────────────────────────────────────────
+function renderUpload(el) {
+  el.innerHTML = `
+  <div id="upload-screen">
+    <div class="upload-hero animate-in">
+      <h1>Drop your data in.</h1>
+      <p>Upload the CSV or Excel files generated by your scrapers. The dashboard will parse them automatically and build your price intelligence report.</p>
+    </div>
+    <div class="drop-zone animate-in delay-1" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <input type="file" id="file-input" multiple accept=".csv,.xlsx,.xls" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+      <div class="drop-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+      </div>
+      <div class="drop-title">Drag files here or click to browse</div>
+      <div class="drop-sub">Supports .csv and .xlsx scraper output files</div>
+      <div class="drop-formats">
+        <span class="format-pill">.csv</span>
+        <span class="format-pill">.xlsx</span>
+        <span class="format-pill">multi-file</span>
+      </div>
+    </div>
+    <div class="upload-files animate-in delay-2" id="file-list" style="display:none"></div>
+    <div class="process-btn-wrap animate-in delay-3" id="process-wrap" style="display:none">
+      <button class="btn btn-ghost" onclick="clearFiles()">Clear</button>
+      <button class="btn btn-accent" onclick="processFiles()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Process &amp; build dashboard
+      </button>
+    </div>
+  </div>`;
+
+  const dz = document.getElementById('drop-zone');
+  const fi = document.getElementById('file-input');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); handleFiles(e.dataTransfer.files); });
+  fi.addEventListener('change', () => handleFiles(fi.files));
+}
+
+let pendingFiles = [];
+
+function handleFiles(fileList) {
+  pendingFiles = [...fileList];
+  renderFileList();
+}
+
+function renderFileList() {
+  const list = document.getElementById('file-list');
+  const wrap = document.getElementById('process-wrap');
+  if (!pendingFiles.length) { list.style.display = 'none'; wrap.style.display = 'none'; return; }
+  list.style.display = 'flex';
+  wrap.style.display = 'flex';
+  list.innerHTML = pendingFiles.map((f, i) => `
+    <div class="upload-file-row">
+      <div class="upload-file-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="${f.name.endsWith('.xlsx') || f.name.endsWith('.xls') ? 'var(--accent)' : 'var(--blue)'}" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div class="upload-file-name">${f.name}</div>
+      <div class="upload-file-size">${(f.size/1024).toFixed(0)} KB</div>
+      <span class="upload-file-status status-ok">Ready</span>
+      <button class="upload-clear" onclick="removeFile(${i})">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>`).join('');
+}
+
+function removeFile(i) { pendingFiles.splice(i, 1); renderFileList(); }
+function clearFiles() { pendingFiles = []; renderFileList(); }
+
+async function processFiles() {
+  if (!pendingFiles.length) return;
+  toast('Processing files…');
+  state.yourProducts = [];
+  state.competitors = {};
+  state.allMatches = [];
+  state.uploadedFiles = [...pendingFiles];
+
+  for (const file of pendingFiles) {
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext === 'csv') await parseCSV(file);
+    else if (ext === 'xlsx' || ext === 'xls') await parseXLSX(file);
+  }
+
+  buildMatches();
+  state.loaded = true;
+  updateBadges();
+  updateRunInfo();
+  toast('Dashboard updated successfully', 'ok');
+  showPage('summary');
+}
+
+function parseCSV(file) {
+  return new Promise(resolve => {
+    Papa.parse(file, {
+      header: true, skipEmptyLines: true,
+      complete: result => { ingestRows(result.data, file.name); resolve(); }
+    });
+  });
+}
+
+function parseXLSX(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      wb.SheetNames.forEach(name => {
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { defval: '' });
+        ingestRows(rows, file.name + ':' + name);
+      });
+      resolve();
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function ingestRows(rows, source) {
+  if (!rows.length) return;
+  const first = rows[0];
+  const keys = Object.keys(first).map(k => k.toLowerCase().trim());
+
+  // Detect if it's a matches sheet (has both competitor + your prices)
+  const isMatchSheet = keys.some(k => k.includes('% difference') || k.includes('%_diff') || k.includes('match type') || k.includes('similarity'));
+  // Detect if it's a raw scraper sheet (has 'competitor' column)
+  const hasCompCol = keys.includes('competitor') || keys.includes('competitor ');
+
+  if (hasCompCol && !isMatchSheet) {
+    // Raw scraper output
+    rows.forEach(r => {
+      const norm = normalise(r);
+      const comp = (norm.competitor || '').toLowerCase().trim();
+      if (!comp) return;
+      // If it looks like your base store, add to yourProducts
+      if (comp === 'ncsshop' || comp === 'your store' || comp === 'base') {
+        state.yourProducts.push(norm);
+      } else {
+        if (!state.competitors[comp]) state.competitors[comp] = { full: [], matches: [] };
+        state.competitors[comp].full.push(norm);
+      }
+    });
+  } else if (isMatchSheet) {
+    // Pre-matched sheet — extract competitor name from source
+    let compName = source.split(':').pop().replace(/matches/i,'').replace(/full/i,'').replace(/_/g,' ').trim().toLowerCase();
+    if (!compName || compName === source) compName = 'unknown';
+    rows.forEach(r => {
+      const norm = normalise(r);
+      const match = buildMatchRow(norm, compName);
+      if (match) state.allMatches.push(match);
+    });
+  }
+}
+
+function normalise(row) {
+  const out = {};
+  Object.keys(row).forEach(k => {
+    const clean = k.toLowerCase().trim().replace(/\s+/g,'_');
+    out[clean] = row[k];
+  });
+  return out;
+}
+
+function buildMatchRow(r, compName) {
+  // Try to extract prices from various column naming conventions
+  const getPrice = (...keys) => {
+    for (const k of keys) {
+      const v = r[k] || r[k.replace(/ /g,'_')] || '';
+      const n = parseFloat(String(v).replace(/[^0-9.-]/g,''));
+      if (!isNaN(n) && n > 0) return n;
+    }
+    return null;
+  };
+  const getString = (...keys) => {
+    for (const k of keys) { const v = r[k] || r[k.replace(/ /g,'_')] || ''; if (v) return String(v).trim(); }
+    return '';
+  };
+
+  const compTitle = getString('cleaningcollective title','prochemical title','rapidclean title',
+    `${compName} title`,'competitor title','product_title','title');
+  const yourTitle = getString('ncsshop title','your title','ncsshop_title','product title');
+  const compPrice = getPrice('cleaningcollective price ex gst','prochemical price ex gst','rapidclean price ex gst',
+    `${compName} price ex gst`,'competitor price ex gst','price_ex_gst','price ex gst');
+  const yourPrice = getPrice('ncsshop price ex gst','your price ex gst','ncsshop_price_ex_gst');
+  const compSKU   = getString('cleaningcollective sku','prochemical sku','rapidclean sku',`${compName} sku`,'competitor sku','sku');
+  const yourSKU   = getString('ncsshop sku','your sku','ncsshop_sku');
+  const matchType = getString('match type','match_type');
+  const similarity = parseFloat(r['similarity'] || r['best_match_similarity'] || 0);
+  const availability = getString('cleaningcollective availability','prochemical availability','rapidclean availability','availability');
+  const onSale    = getString('cleaningcollective on sale','on_sale','sale');
+  const rrp       = getPrice('cleaningcollective rrp ex gst','prochemical rrp ex gst','rapidclean rrp ex gst','rrp_ex_gst');
+
+  if (!compPrice && !yourPrice) return null;
+
+  const diffPct = (yourPrice && compPrice) ? ((compPrice - yourPrice) / yourPrice * 100) : null;
+
+  return {
+    competitor: compName,
+    comp_title: compTitle,
+    your_title: yourTitle,
+    comp_price: compPrice,
+    your_price: yourPrice,
+    comp_sku: compSKU,
+    your_sku: yourSKU,
+    match_type: matchType,
+    similarity,
+    availability,
+    on_sale: onSale,
+    rrp,
+    diff_pct: diffPct,
+    cheaper: diffPct !== null ? diffPct < -2 : false,
+    dearer:  diffPct !== null ? diffPct > 2  : false,
+  };
+}
+
+function buildMatches() {
+  // Also build matches from raw competitor data using SKU lookup
+  if (state.yourProducts.length > 0) {
+    const yourBySKU = {};
+    state.yourProducts.forEach(p => { if (p.sku) yourBySKU[p.sku.toLowerCase()] = p; });
+    Object.entries(state.competitors).forEach(([comp, data]) => {
+      data.full.forEach(cp => {
+        if (!cp.sku) return;
+        const yours = yourBySKU[cp.sku.toLowerCase()];
+        if (yours) {
+          const cp_p = parseFloat(String(cp.price_ex_gst||'').replace(/[^0-9.]/g,''));
+          const yr_p = parseFloat(String(yours.price_ex_gst||'').replace(/[^0-9.]/g,''));
+          const diff = (yr_p && cp_p) ? (cp_p - yr_p) / yr_p * 100 : null;
+          state.allMatches.push({
+            competitor: comp,
+            comp_title: cp.product_title,
+            your_title: yours.product_title,
+            comp_price: cp_p || null,
+            your_price: yr_p || null,
+            comp_sku: cp.sku,
+            your_sku: yours.sku,
+            match_type: 'SKU',
+            similarity: 1,
+            availability: cp.availability,
+            on_sale: '',
+            rrp: null,
+            diff_pct: diff,
+            cheaper: diff !== null ? diff < -2 : false,
+            dearer:  diff !== null ? diff > 2  : false,
+          });
+        }
+      });
+    });
+  }
+}
+
+function updateBadges() {
+  document.getElementById('matches-badge').textContent = state.allMatches.length || '—';
+  const opps = state.allMatches.filter(m => m.cheaper).length;
+  document.getElementById('opp-badge').textContent = opps || '—';
+}
+
+function updateRunInfo() {
+  const now = new Date();
+  document.getElementById('run-info').innerHTML =
+    `<strong>Last updated</strong><br>${now.toLocaleDateString('en-AU', {day:'numeric',month:'short',year:'numeric'})}`;
+}
+
+function fmt$(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return '$' + Number(n).toFixed(2);
+}
+function fmtPct(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  const v = Number(n).toFixed(1);
+  return (n > 0 ? '+' : '') + v + '%';
+}
+
+// ─────────────────────────────────────────────
+// SUMMARY PAGE
+// ─────────────────────────────────────────────
+function renderSummary(el) {
+  if (!state.loaded) { renderEmpty(el, 'No data loaded', 'Upload your scraper CSV files to get started.'); return; }
+
+  const matches = state.allMatches;
+  const cheaper = matches.filter(m => m.cheaper).length;
+  const dearer  = matches.filter(m => m.dearer).length;
+  const same    = matches.length - cheaper - dearer;
+  const compNames = Object.keys(state.competitors).length
+    ? Object.keys(state.competitors)
+    : [...new Set(matches.map(m => m.competitor))];
+
+  el.innerHTML = `
+  <div class="metrics-grid animate-in">
+    <div class="metric m-white">
+      <div class="metric-label">Your products</div>
+      <div class="metric-val">${state.yourProducts.length || '—'}</div>
+      <div class="metric-sub">In catalogue</div>
+    </div>
+    <div class="metric m-blue">
+      <div class="metric-label">Total matches</div>
+      <div class="metric-val">${matches.length}</div>
+      <div class="metric-sub">Across ${compNames.length} competitors</div>
+    </div>
+    <div class="metric m-green">
+      <div class="metric-label">They're cheaper</div>
+      <div class="metric-val green">${cheaper}</div>
+      <div class="metric-sub up">${matches.length ? Math.round(cheaper/matches.length*100) : 0}% of matches</div>
+    </div>
+    <div class="metric m-red">
+      <div class="metric-label">They're dearer</div>
+      <div class="metric-val red">${dearer}</div>
+      <div class="metric-sub down">${matches.length ? Math.round(dearer/matches.length*100) : 0}% of matches</div>
+    </div>
+    <div class="metric m-amber">
+      <div class="metric-label">Similar price</div>
+      <div class="metric-val">${same}</div>
+      <div class="metric-sub">Within ±2%</div>
+    </div>
+  </div>
+
+  <div class="charts-row animate-in delay-2">
+    <div class="chart-wrap">
+      <div class="chart-title">Price position breakdown</div>
+      <div class="chart-sub">How your prices compare across all matched products</div>
+      <div class="chart-canvas"><canvas id="chart-donut"></canvas></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">Matches per competitor</div>
+      <div class="chart-sub">Number of your products found at each competitor</div>
+      <div class="chart-canvas"><canvas id="chart-bar"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section animate-in delay-3">
+    <div class="section-head">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        Competitor overview
+      </div>
+    </div>
+    <div class="comp-grid" id="comp-grid"></div>
+  </div>
+
+  <div class="section animate-in delay-4">
+    <div class="section-head">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>
+        Top opportunities — they're cheaper than you
+      </div>
+      <button class="btn btn-ghost" onclick="showPage('opportunities')">View all →</button>
+    </div>
+    <div class="section-body" id="opp-preview"></div>
+  </div>`;
+
+  // Donut chart
+  setTimeout(() => {
+    new Chart(document.getElementById('chart-donut'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Cheaper than you','Dearer than you','Similar'],
+        datasets: [{ data: [cheaper, dearer, same], backgroundColor: ['#00e5a0','#ff4f4f','#2a3040'], borderWidth: 0, hoverOffset: 4 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '72%',
+        plugins: { legend: { position: 'bottom', labels: { color: '#8b95a1', font: { size: 11, family: "'DM Sans'" }, padding: 16, boxWidth: 10 } } } }
+    });
+
+    const compMatchCounts = compNames.map(c => matches.filter(m => m.competitor === c).length);
+    new Chart(document.getElementById('chart-bar'), {
+      type: 'bar',
+      data: {
+        labels: compNames.map(c => c.charAt(0).toUpperCase() + c.slice(1)),
+        datasets: [{ data: compMatchCounts, backgroundColor: '#1a3a2e', borderColor: '#00e5a0', borderWidth: 1, borderRadius: 4 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#8b95a1', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+          y: { ticks: { color: '#8b95a1', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+        }
+      }
+    });
+
+    // Competitor cards
+    const grid = document.getElementById('comp-grid');
+    grid.innerHTML = compNames.map(c => {
+      const cm = matches.filter(m => m.competitor === c);
+      const ch = cm.filter(m => m.cheaper).length;
+      const de = cm.filter(m => m.dearer).length;
+      const full = state.competitors[c] ? state.competitors[c].full.length : '—';
+      const indicator = ch > de ? 'r' : (de > ch ? 'g' : 'a');
+      const avgDiff = cm.length ? (cm.reduce((s,m) => s + (m.diff_pct||0), 0) / cm.length) : null;
+      return `<div class="comp-card" onclick="filterMatchesTo('${c}')">
+        <div class="comp-indicator ${indicator}"></div>
+        <div class="comp-card-name">${c.charAt(0).toUpperCase() + c.slice(1)}</div>
+        <div class="comp-card-stat"><span class="comp-card-stat-l">Products listed</span><span class="comp-card-stat-r">${typeof full==='number' ? full.toLocaleString() : full}</span></div>
+        <div class="comp-card-stat"><span class="comp-card-stat-l">Matches found</span><span class="comp-card-stat-r">${cm.length}</span></div>
+        <div class="comp-card-stat"><span class="comp-card-stat-l">Cheaper than you</span><span class="comp-card-stat-r ${ch>0?'r':''}">${ch}</span></div>
+        <div class="comp-card-stat"><span class="comp-card-stat-l">Avg price diff</span><span class="comp-card-stat-r ${avgDiff !== null && avgDiff < 0 ? 'r':'g'}">${avgDiff !== null ? fmtPct(avgDiff) : '—'}</span></div>
+      </div>`;
+    }).join('');
+
+    // Opp preview
+    const topOpps = matches.filter(m => m.cheaper).sort((a,b) => a.diff_pct - b.diff_pct).slice(0, 4);
+    const oppPrev = document.getElementById('opp-preview');
+    if (!topOpps.length) { oppPrev.innerHTML = '<div style="padding:20px;color:var(--text3);font-size:13px">No opportunities found — you may be the cheapest!</div>'; return; }
+    oppPrev.innerHTML = `<div class="opp-grid">${topOpps.map(m => `
+      <div class="opp-card">
+        <div class="opp-prod">${m.comp_title || m.your_title}</div>
+        <div class="opp-comp">${m.competitor.charAt(0).toUpperCase() + m.competitor.slice(1)} · ${m.match_type || 'Match'}</div>
+        <div class="opp-prices">
+          <div><span class="opp-price-label">Their price</span><span class="opp-price diff-r">${fmt$(m.comp_price)}</span></div>
+          <span class="opp-arrow">→</span>
+          <div><span class="opp-price-label">Your price</span><span class="opp-price">${fmt$(m.your_price)}</span></div>
+          <span class="opp-diff bad">${fmtPct(m.diff_pct)}</span>
+        </div>
+      </div>`).join('')}</div>`;
+  }, 50);
+}
+
+function filterMatchesTo(comp) {
+  state.compFilter = comp;
+  state.matchFilter = 'all';
+  state.page = 1;
+  showPage('matches');
+}
+
+// ─────────────────────────────────────────────
+// OPPORTUNITIES PAGE
+// ─────────────────────────────────────────────
+function renderOpportunities(el) {
+  if (!state.loaded) { renderEmpty(el, 'No data loaded', 'Upload your scraper CSV files to get started.'); return; }
+  const opps = state.allMatches.filter(m => m.cheaper).sort((a,b) => a.diff_pct - b.diff_pct);
+  if (!opps.length) { renderEmpty(el, 'No opportunities found', 'Either no matches were found, or your prices are already the lowest.'); return; }
+
+  const compNames = [...new Set(opps.map(m => m.competitor))];
+  el.innerHTML = `
+  <div class="metrics-grid animate-in" style="grid-template-columns:repeat(4,1fr)">
+    <div class="metric m-red"><div class="metric-label">Total opportunities</div><div class="metric-val red">${opps.length}</div><div class="metric-sub down">Products undercut</div></div>
+    <div class="metric m-amber"><div class="metric-label">Worst gap</div><div class="metric-val">${fmtPct(Math.min(...opps.map(m=>m.diff_pct)))}</div><div class="metric-sub">Most undercut</div></div>
+    <div class="metric m-white"><div class="metric-label">Avg gap</div><div class="metric-val">${fmtPct(opps.reduce((s,m)=>s+(m.diff_pct||0),0)/opps.length)}</div><div class="metric-sub">Average difference</div></div>
+    <div class="metric m-blue"><div class="metric-label">Competitors</div><div class="metric-val">${compNames.length}</div><div class="metric-sub">Undercutting you</div></div>
+  </div>
+  <div class="section animate-in delay-1">
+    <div class="section-head">
+      <div class="section-title">Products where competitors are cheaper</div>
+      <div class="filter-group">${['All',...compNames].map(c => `<button class="filter-btn ${c==='All'?'active':''}" onclick="filterOpps(this,'${c}')">${c.charAt(0).toUpperCase()+c.slice(1)}</button>`).join('')}</div>
+    </div>
+    <div class="section-body-np">
+      <div style="overflow:auto">
+      <table>
+        <thead><tr>
+          <th>Their product</th><th>Your product</th>
+          <th>Competitor</th><th>Match</th>
+          <th>Their price</th><th>Your price</th><th>Difference</th>
+          <th>RRP</th><th>Sale?</th>
+        </tr></thead>
+        <tbody id="opp-tbody">${renderOppRows(opps)}</tbody>
+      </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderOppRows(rows) {
+  return rows.map(m => `<tr>
+    <td><div class="prod-name">${m.comp_title||'—'}</div>${m.comp_sku ? `<span class="sku-tag">${m.comp_sku}</span>` : ''}</td>
+    <td><div class="prod-name">${m.your_title||'—'}</div>${m.your_sku ? `<span class="sku-tag">${m.your_sku}</span>` : ''}</td>
+    <td><span class="pill pill-dim">${m.competitor}</span></td>
+    <td><span class="pill ${m.match_type==='SKU'?'pill-a':'pill-b'}">${m.match_type||'—'}</span></td>
+    <td class="price-col diff-r">${fmt$(m.comp_price)}</td>
+    <td class="price-col">${fmt$(m.your_price)}</td>
+    <td class="diff-r">${fmtPct(m.diff_pct)}</td>
+    <td class="price-col">${fmt$(m.rrp)}</td>
+    <td>${m.on_sale === 'YES' || m.on_sale === true ? '<span class="pill pill-r">On sale</span>' : ''}</td>
+  </tr>`).join('');
+}
+
+function filterOpps(btn, comp) {
+  document.querySelectorAll('#opp-tbody').forEach(() => {});
+  document.querySelectorAll('.section .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const opps = state.allMatches.filter(m => m.cheaper && (comp === 'All' || m.competitor === comp)).sort((a,b) => a.diff_pct - b.diff_pct);
+  document.getElementById('opp-tbody').innerHTML = renderOppRows(opps);
+}
+
+// ─────────────────────────────────────────────
+// MATCHES PAGE
+// ─────────────────────────────────────────────
+function renderMatches(el) {
+  if (!state.loaded) { renderEmpty(el, 'No data loaded', 'Upload your scraper CSV files to get started.'); return; }
+  const compNames = [...new Set(state.allMatches.map(m => m.competitor))];
+
+  el.innerHTML = `
+  <div class="section animate-in" style="flex:1">
+    <div class="tbl-controls">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="search-input" placeholder="Search products, SKUs…" id="match-search" oninput="filterMatchTable()" value="${state.searchQ}">
+      </div>
+      <div class="filter-group">
+        <button class="filter-btn ${state.matchFilter==='all'?'active':''}" onclick="setMatchFilter('all',this)">All</button>
+        <button class="filter-btn ${state.matchFilter==='cheaper'?'active':''}" onclick="setMatchFilter('cheaper',this)">Cheaper than you</button>
+        <button class="filter-btn ${state.matchFilter==='dearer'?'active':''}" onclick="setMatchFilter('dearer',this)">Dearer than you</button>
+        <button class="filter-btn ${state.matchFilter==='sale'?'active':''}" onclick="setMatchFilter('sale',this)">On sale</button>
+        <button class="filter-btn ${state.matchFilter==='sku'?'active':''}" onclick="setMatchFilter('sku',this)">SKU match</button>
+      </div>
+      <select class="select-sm" id="comp-select" onchange="setCompFilter(this.value)">
+        <option value="all" ${state.compFilter==='all'?'selected':''}>All competitors</option>
+        ${compNames.map(c => `<option value="${c}" ${state.compFilter===c?'selected':''}>${c.charAt(0).toUpperCase()+c.slice(1)}</option>`).join('')}
+      </select>
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr>
+          <th onclick="sortTable('comp_title')">Their product</th>
+          <th onclick="sortTable('your_title')">Your product</th>
+          <th onclick="sortTable('competitor')">Competitor</th>
+          <th onclick="sortTable('match_type')">Match</th>
+          <th onclick="sortTable('comp_price')">Their price</th>
+          <th onclick="sortTable('your_price')">Your price</th>
+          <th onclick="sortTable('diff_pct')" class="sorted">Difference</th>
+          <th>Status</th>
+        </tr></thead>
+        <tbody id="match-tbody"></tbody>
+      </table>
+    </div>
+    <div class="tbl-footer">
+      <div class="tbl-count" id="match-count"></div>
+      <div class="pagination" id="match-pages"></div>
+    </div>
+  </div>`;
+
+  renderMatchTable();
+}
+
+function getFilteredMatches() {
+  let rows = [...state.allMatches];
+  if (state.matchFilter === 'cheaper') rows = rows.filter(m => m.cheaper);
+  else if (state.matchFilter === 'dearer') rows = rows.filter(m => m.dearer);
+  else if (state.matchFilter === 'sale') rows = rows.filter(m => m.on_sale === 'YES' || m.on_sale === true);
+  else if (state.matchFilter === 'sku') rows = rows.filter(m => m.match_type === 'SKU');
+  if (state.compFilter !== 'all') rows = rows.filter(m => m.competitor === state.compFilter);
+  if (state.searchQ) {
+    const q = state.searchQ.toLowerCase();
+    rows = rows.filter(m => (m.comp_title||'').toLowerCase().includes(q) || (m.your_title||'').toLowerCase().includes(q) || (m.comp_sku||'').toLowerCase().includes(q) || (m.your_sku||'').toLowerCase().includes(q));
+  }
+  if (state.sortCol) {
+    rows.sort((a,b) => {
+      let av = a[state.sortCol], bv = b[state.sortCol];
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      return av < bv ? -state.sortDir : av > bv ? state.sortDir : 0;
+    });
+  }
+  return rows;
+}
+
+function renderMatchTable() {
+  const rows = getFilteredMatches();
+  const total = rows.length;
+  const totalPages = Math.ceil(total / state.pageSize);
+  const slice = rows.slice((state.page-1)*state.pageSize, state.page*state.pageSize);
+
+  const tbody = document.getElementById('match-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = slice.map(m => `<tr>
+    <td><div class="prod-name">${m.comp_title||'—'}</div>${m.comp_sku ? `<span class="sku-tag">${m.comp_sku}</span>` : ''}</td>
+    <td><div class="prod-name">${m.your_title||'—'}</div>${m.your_sku ? `<span class="sku-tag">${m.your_sku}</span>` : ''}</td>
+    <td><span class="pill pill-dim">${m.competitor}</span></td>
+    <td><span class="pill ${m.match_type==='SKU'?'pill-a':'pill-b'}">${m.match_type||'—'}</span></td>
+    <td class="price-col ${m.cheaper?'diff-r':''}">${fmt$(m.comp_price)}</td>
+    <td class="price-col">${fmt$(m.your_price)}</td>
+    <td class="${m.cheaper?'diff-r':m.dearer?'diff-g':'diff-n'}">${fmtPct(m.diff_pct)}</td>
+    <td>${m.availability ? `<span class="pill ${m.availability.toLowerCase().includes('in stock')?'pill-g':'pill-dim'}">${m.availability}</span>` : ''}</td>
+  </tr>`).join('') || `<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">No matching rows</td></tr>`;
+
+  const countEl = document.getElementById('match-count');
+  if (countEl) countEl.textContent = `${total.toLocaleString()} rows${totalPages > 1 ? `, page ${state.page} of ${totalPages}` : ''}`;
+
+  const pagesEl = document.getElementById('match-pages');
+  if (pagesEl && totalPages > 1) {
+    const pageNums = [];
+    for (let i = Math.max(1, state.page-2); i <= Math.min(totalPages, state.page+2); i++) pageNums.push(i);
+    pagesEl.innerHTML = [
+      state.page > 1 ? `<button class="page-btn" onclick="goPage(${state.page-1})">‹</button>` : '',
+      ...pageNums.map(p => `<button class="page-btn ${p===state.page?'active':''}" onclick="goPage(${p})">${p}</button>`),
+      state.page < totalPages ? `<button class="page-btn" onclick="goPage(${state.page+1})">›</button>` : ''
+    ].join('');
+  } else if (pagesEl) pagesEl.innerHTML = '';
+}
+
+function goPage(p) { state.page = p; renderMatchTable(); }
+function setMatchFilter(f, btn) { state.matchFilter = f; state.page = 1; document.querySelectorAll('.filter-group .filter-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); renderMatchTable(); }
+function setCompFilter(v) { state.compFilter = v; state.page = 1; renderMatchTable(); }
+function filterMatchTable() { state.searchQ = document.getElementById('match-search').value; state.page = 1; renderMatchTable(); }
+function sortTable(col) { state.sortDir = state.sortCol === col ? -state.sortDir : 1; state.sortCol = col; renderMatchTable(); }
+
+// ─────────────────────────────────────────────
+// CATALOGUE PAGE
+// ─────────────────────────────────────────────
+function renderCatalogue(el) {
+  if (!state.loaded) { renderEmpty(el, 'No data loaded', 'Upload your scraper CSV files to get started.'); return; }
+  const compNames = [...new Set(state.allMatches.map(m => m.competitor))];
+  const allProds = state.yourProducts.length ? state.yourProducts : state.allMatches.map(m => ({
+    product_title: m.your_title, sku: m.your_sku, price_ex_gst: m.your_price,
+    category: '', availability: ''
+  }));
+  const cats = [...new Set(allProds.map(p => p.category||'').filter(Boolean))];
+
+  el.innerHTML = `
+  <div class="section animate-in" style="flex:1">
+    <div class="tbl-controls">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="search-input" placeholder="Search your catalogue…" id="cat-search" oninput="renderCatTable()">
+      </div>
+      ${cats.length ? `<select class="select-sm" id="cat-filter" onchange="renderCatTable()">
+        <option value="">All categories</option>
+        ${cats.map(c => `<option>${c}</option>`).join('')}
+      </select>` : ''}
+    </div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th>Price (ex GST)</th><th>Availability</th><th>Matched?</th></tr></thead>
+        <tbody id="cat-tbody"></tbody>
+      </table>
+    </div>
+    <div class="tbl-footer"><div class="tbl-count" id="cat-count"></div></div>
+  </div>`;
+
+  window._catProds = allProds;
+  window._catMatches = state.allMatches;
+  renderCatTable();
+}
+
+function renderCatTable() {
+  const q = (document.getElementById('cat-search')?.value||'').toLowerCase();
+  const cf = document.getElementById('cat-filter')?.value||'';
+  let rows = window._catProds || [];
+  if (q) rows = rows.filter(p => (p.product_title||'').toLowerCase().includes(q) || (p.sku||'').toLowerCase().includes(q));
+  if (cf) rows = rows.filter(p => (p.category||'') === cf);
+  const matchedSKUs = new Set((window._catMatches||[]).map(m => (m.your_sku||'').toLowerCase()));
+  const tbody = document.getElementById('cat-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = rows.slice(0,200).map(p => {
+    const matched = p.sku && matchedSKUs.has((p.sku||'').toLowerCase());
+    return `<tr>
+      <td><div class="prod-name">${p.product_title||'—'}</div></td>
+      <td><span class="sku-tag">${p.sku||'—'}</span></td>
+      <td style="color:var(--text3);font-size:12px">${p.category||'—'}</td>
+      <td class="price-col">${fmt$(typeof p.price_ex_gst==='number' ? p.price_ex_gst : parseFloat(String(p.price_ex_gst||'').replace(/[^0-9.]/g,'')))}</td>
+      <td>${p.availability ? `<span class="pill ${(p.availability||'').toLowerCase().includes('in')?'pill-g':'pill-dim'}">${p.availability}</span>` : ''}</td>
+      <td>${matched ? '<span class="pill pill-g">Yes</span>' : '<span class="pill pill-dim">No</span>'}</td>
+    </tr>`;
+  }).join('');
+  const countEl = document.getElementById('cat-count');
+  if (countEl) countEl.textContent = `${rows.length.toLocaleString()} products`;
+}
+
+// ─────────────────────────────────────────────
+// DOWNLOADS PAGE
+// ─────────────────────────────────────────────
+function renderDownloads(el) {
+  el.innerHTML = `
+  <div class="section animate-in">
+    <div class="section-head">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Uploaded source files
+      </div>
+    </div>
+    <div class="downloads-grid">
+      ${state.uploadedFiles.length ? state.uploadedFiles.map(f => `
+        <div class="dl-card">
+          <div class="dl-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="${f.name.endsWith('.xlsx')?'var(--accent)':'var(--blue)'}" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="dl-name">${f.name}</div>
+          <div class="dl-meta">${(f.size/1024).toFixed(0)} KB · Uploaded this session</div>
+          <button class="dl-btn" onclick="downloadFile('${f.name}')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download original
+          </button>
+        </div>`).join('') : '<div style="padding:20px;color:var(--text3);font-size:13px;grid-column:1/-1">No files uploaded yet.</div>'}
+    </div>
+  </div>
+
+  <div class="section animate-in delay-1">
+    <div class="section-head">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Generated reports
+      </div>
+    </div>
+    <div class="downloads-grid">
+      <div class="dl-card">
+        <div class="dl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
+        <div class="dl-name">All matches — CSV</div>
+        <div class="dl-meta">${state.allMatches.length} rows · Generated from current data</div>
+        <button class="dl-btn" onclick="exportMatchesCSV()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+      </div>
+      <div class="dl-card">
+        <div class="dl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
+        <div class="dl-name">Opportunities — CSV</div>
+        <div class="dl-meta">${state.allMatches.filter(m=>m.cheaper).length} rows · Where competitors undercut you</div>
+        <button class="dl-btn" onclick="exportOppsCSV()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+      </div>
+      <div class="dl-card">
+        <div class="dl-icon"><svg viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="dl-name">Full summary — XLSX</div>
+        <div class="dl-meta">Matches + opportunities in one workbook</div>
+        <button class="dl-btn" onclick="exportXLSX()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export XLSX
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function downloadFile(name) {
+  const f = state.uploadedFiles.find(f => f.name === name);
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  const a = document.createElement('a'); a.href = url; a.download = f.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast(`Downloading ${f.name}`);
+}
+
+function toCSV(rows, cols) {
+  const header = cols.join(',');
+  const body = rows.map(r => cols.map(c => {
+    const v = String(r[c] !== null && r[c] !== undefined ? r[c] : '');
+    return v.includes(',') || v.includes('"') ? `"${v.replace(/"/g,'""')}"` : v;
+  }).join(',')).join('\n');
+  return header + '\n' + body;
+}
+
+function triggerDownload(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast(`Downloaded ${filename}`);
+}
+
+function exportMatchesCSV() {
+  const cols = ['competitor','your_title','comp_title','your_sku','comp_sku','your_price','comp_price','diff_pct','match_type','availability'];
+  triggerDownload('\uFEFF' + toCSV(state.allMatches, cols), 'price-intel-matches.csv', 'text/csv;charset=utf-8');
+}
+
+function exportOppsCSV() {
+  const opps = state.allMatches.filter(m => m.cheaper);
+  const cols = ['competitor','your_title','comp_title','your_sku','comp_sku','your_price','comp_price','diff_pct','match_type','on_sale'];
+  triggerDownload('\uFEFF' + toCSV(opps, cols), 'price-intel-opportunities.csv', 'text/csv;charset=utf-8');
+}
+
+function exportXLSX() {
+  const wb = XLSX.utils.book_new();
+  const matchCols = ['competitor','your_title','comp_title','your_sku','comp_sku','your_price','comp_price','diff_pct','match_type','availability'];
+  const oppCols   = ['competitor','your_title','comp_title','your_sku','comp_sku','your_price','comp_price','diff_pct','match_type','on_sale'];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.allMatches.map(r => Object.fromEntries(matchCols.map(c => [c, r[c]])))), 'All Matches');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(state.allMatches.filter(m=>m.cheaper).map(r => Object.fromEntries(oppCols.map(c => [c, r[c]])))), 'Opportunities');
+  XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  triggerDownload(new Uint8Array(buf), 'price-intel-report.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+}
+
+// ─────────────────────────────────────────────
+// EMPTY STATE
+// ─────────────────────────────────────────────
+function renderEmpty(el, title, msg) {
+  el.innerHTML = `<div class="empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    <strong style="color:var(--text2);font-size:14px">${title}</strong>
+    <p>${msg}</p>
+    <button class="btn btn-ghost" onclick="showPage('upload')">Upload data →</button>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+showPage('upload');
+</script>
+</body>
+</html>
