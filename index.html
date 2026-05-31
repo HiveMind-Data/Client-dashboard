@@ -596,57 +596,75 @@ function normalise(row) {
 }
 
 function buildMatchRow(r, compName) {
-  // Try to extract prices from various column naming conventions
-  const getPrice = (...keys) => {
-    for (const k of keys) {
-      const v = r[k] || r[k.replace(/ /g,'_')] || '';
-      const n = parseFloat(String(v).replace(/[^0-9.-]/g,''));
-      if (!isNaN(n) && n > 0) return n;
-    }
-    return null;
+  const keys = Object.keys(r);
+
+  // Generic column finder — finds first column containing all given keywords
+  const findCol = (...keywords) => {
+    const key = keys.find(k => keywords.every(kw => k.toLowerCase().includes(kw.toLowerCase())));
+    return key ? String(r[key]).trim() : '';
   };
-  const getString = (...keys) => {
-    for (const k of keys) { const v = r[k] || r[k.replace(/ /g,'_')] || ''; if (v) return String(v).trim(); }
-    return '';
+  const findPrice = (...keywords) => {
+    const key = keys.find(k => keywords.every(kw => k.toLowerCase().includes(kw.toLowerCase())));
+    if (!key) return null;
+    const n = parseFloat(String(r[key]).replace(/[^0-9.-]/g, ''));
+    return isNaN(n) || n <= 0 ? null : n;
   };
 
-  const compTitle = getString('cleaningcollective title','prochemical title','rapidclean title',
-    `${compName} title`,'competitor title','product_title','title');
-  const yourTitle = getString('ncsshop title','your title','ncsshop_title','product title');
-  const compPrice = getPrice('cleaningcollective price ex gst','prochemical price ex gst','rapidclean price ex gst',
-    `${compName} price ex gst`,'competitor price ex gst','price_ex_gst','price ex gst');
-  const yourPrice = getPrice('ncsshop price ex gst','your price ex gst','ncsshop_price_ex_gst');
-  const compSKU   = getString('cleaningcollective sku','prochemical sku','rapidclean sku',`${compName} sku`,'competitor sku','sku');
-  const yourSKU   = getString('ncsshop sku','your sku','ncsshop_sku');
-  const matchType = getString('match type','match_type');
-  const similarity = parseFloat(r['similarity'] || r['best_match_similarity'] || 0);
-  const availability = getString('cleaningcollective availability','prochemical availability','rapidclean availability','availability');
-  const onSale    = getString('cleaningcollective on sale','on_sale','sale');
-  const rrp       = getPrice('cleaningcollective rrp ex gst','prochemical rrp ex gst','rapidclean rrp ex gst','rrp_ex_gst');
+  // Your store columns — anything with "ncsshop" or starting with "your"
+  const yourTitleKey  = keys.find(k => k.toLowerCase().includes('ncsshop') && k.toLowerCase().includes('title') || k.toLowerCase().includes('ncsshop') && k.toLowerCase().includes('product'));
+  const yourPriceKey  = keys.find(k => k.toLowerCase().includes('ncsshop') && k.toLowerCase().includes('price'));
+  const yourSKUKey    = keys.find(k => k.toLowerCase().includes('ncsshop') && k.toLowerCase().includes('sku'));
+
+  // Competitor columns — anything that isn't ncsshop and has these fields
+  const compTitleKey  = keys.find(k => !k.toLowerCase().includes('ncsshop') && (k.toLowerCase().includes('product') || k.toLowerCase().includes('title')) && !k.toLowerCase().includes('%') && !k.toLowerCase().includes('match'));
+  const compPriceKey  = keys.find(k => !k.toLowerCase().includes('ncsshop') && k.toLowerCase().includes('price') && !k.toLowerCase().includes('rrp'));
+  const compSKUKey    = keys.find(k => !k.toLowerCase().includes('ncsshop') && k.toLowerCase().includes('sku'));
+  const compRRPKey    = keys.find(k => !k.toLowerCase().includes('ncsshop') && k.toLowerCase().includes('rrp'));
+  const diffKey       = keys.find(k => k.toLowerCase().includes('%') || k.toLowerCase().includes('diff'));
+  const matchTypeKey  = keys.find(k => k.toLowerCase().includes('match') && k.toLowerCase().includes('type'));
+  const availKey      = keys.find(k => k.toLowerCase().includes('availab'));
+  const saleKey       = keys.find(k => k.toLowerCase().includes('sale') || k.toLowerCase().includes('special'));
+
+  const yourTitle = yourTitleKey  ? String(r[yourTitleKey]).trim()  : '';
+  const compTitle = compTitleKey  ? String(r[compTitleKey]).trim()  : '';
+  const yourPrice = yourPriceKey  ? parseFloat(String(r[yourPriceKey]).replace(/[^0-9.-]/g,'')) || null : null;
+  const compPrice = compPriceKey  ? parseFloat(String(r[compPriceKey]).replace(/[^0-9.-]/g,'')) || null : null;
+  const yourSKU   = yourSKUKey    ? String(r[yourSKUKey]).trim()    : '';
+  const compSKU   = compSKUKey    ? String(r[compSKUKey]).trim()    : '';
+  const rrp       = compRRPKey    ? parseFloat(String(r[compRRPKey]).replace(/[^0-9.-]/g,'')) || null : null;
+  const matchType = matchTypeKey  ? String(r[matchTypeKey]).trim()  : '';
+  const availability = availKey   ? String(r[availKey]).trim()      : '';
+  const onSale    = saleKey       ? String(r[saleKey]).trim()       : '';
+
+  // % diff — use stored value if present, otherwise calculate
+  let diffPct = null;
+  if (diffKey && r[diffKey] !== '' && r[diffKey] !== null) {
+    diffPct = parseFloat(String(r[diffKey]).replace(/[^0-9.-]/g,''));
+    if (String(r[diffKey]).includes('%')) diffPct = diffPct; // already a percentage
+  } else if (yourPrice && compPrice) {
+    diffPct = (compPrice - yourPrice) / yourPrice * 100;
+  }
 
   if (!compPrice && !yourPrice) return null;
 
-  const diffPct = (yourPrice && compPrice) ? ((compPrice - yourPrice) / yourPrice * 100) : null;
-
   return {
-    competitor: compName,
-    comp_title: compTitle,
-    your_title: yourTitle,
-    comp_price: compPrice,
-    your_price: yourPrice,
-    comp_sku: compSKU,
-    your_sku: yourSKU,
-    match_type: matchType,
-    similarity,
+    competitor:  compName,
+    comp_title:  compTitle,
+    your_title:  yourTitle,
+    comp_price:  compPrice,
+    your_price:  yourPrice,
+    comp_sku:    compSKU,
+    your_sku:    yourSKU,
+    match_type:  matchType,
+    similarity:  parseFloat(r['similarity'] || r['best_match_similarity'] || 0),
     availability,
-    on_sale: onSale,
+    on_sale:     onSale,
     rrp,
-    diff_pct: diffPct,
-    cheaper: diffPct !== null ? diffPct < -2 : false,
-    dearer:  diffPct !== null ? diffPct > 2  : false,
+    diff_pct:    diffPct,
+    cheaper:     diffPct !== null ? diffPct < -2 : false,
+    dearer:      diffPct !== null ? diffPct > 2  : false,
   };
 }
-
 function buildMatches() {
   // Also build matches from raw competitor data using SKU lookup
   if (state.yourProducts.length > 0) {
@@ -921,7 +939,7 @@ function renderMatches(el) {
   const compNames = [...new Set(state.allMatches.map(m => m.competitor))];
 
   el.innerHTML = `
-  <div class="section animate-in" style="flex:1">
+  <div class="section animate-in" style="flex:1;overflow:auto;max-height:calc(100vh - 160px)">
     <div class="tbl-controls">
       <div class="search-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1038,7 +1056,7 @@ function renderCatalogue(el) {
   const cats = [...new Set(allProds.map(p => p.category||'').filter(Boolean))];
 
   el.innerHTML = `
-  <div class="section animate-in" style="flex:1">
+  <div class="section animate-in" style="flex:1;overflow:auto;max-height:calc(100vh - 160px)">
     <div class="tbl-controls">
       <div class="search-wrap">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
